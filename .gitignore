@@ -1,7 +1,10 @@
-# Ignore specific data folders
-data/cleaned/
-data/stock/
+# Mac
+.DS_Store
 
-# Python cache
+# Python
 __pycache__/
 *.pyc
+
+# Data
+data/cleaned/
+data/stock/
