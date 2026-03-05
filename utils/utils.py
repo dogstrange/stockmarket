@@ -3,6 +3,9 @@ import os
 import glob
 import numpy as np
 import pandas_ta as ta
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
 
 # ── Numpy 2.x compatibility patch ──
 if not hasattr(np, "NaN"):
@@ -12,42 +15,14 @@ if not hasattr(np, "NaN"):
 # CONFIGURATION
 # ==========================================
 
-_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-CLEANED_FOLDER = os.path.join(_THIS_DIR, "..", "data", "project_funds")
+CLEANED_FOLDER = os.path.join("..", "data", "project_funds")
 
 FILE_NAME = "claude_toy_stock.csv"
 FILE_PATH = os.path.join(CLEANED_FOLDER, FILE_NAME)
 
-# ─── Curated list of liquid, well-known tickers ───
-DEFAULT_TICKERS = [
-    # Tech
-    "aapl.us",
-    "msft.us",
-    "googl.us",
-    "nvda.us",
-    "meta.us",
-    # Finance
-    "jpm.us",
-    "bac.us",
-    "gs.us",
-    # Consumer
-    "amzn.us",
-    "wmt.us",
-    "ko.us",
-    # Healthcare
-    "jnj.us",
-    "unh.us",
-    # Energy
-    "xom.us",
-    "cvx.us",
-    # Industrial
-    "cat.us",
-    "ba.us",
-]
-
 
 # ==========================================
-# TRIPLE BARRIER LABELING  (original)
+# TRIPLE BARRIER LABELING
 # ==========================================
 def apply_triple_barrier_label(df, profit_target=0.02, stop_loss=-0.02, window=5):
     """
@@ -66,7 +41,6 @@ def apply_triple_barrier_label(df, profit_target=0.02, stop_loss=-0.02, window=5
     for i in range(n - window):
         current_price = close_prices[i]
         future_window = close_prices[i + 1 : i + 1 + window]
-
         pct_changes = (future_window - current_price) / current_price
 
         profit_hits = np.where(pct_changes >= profit_target)[0]
@@ -85,11 +59,10 @@ def apply_triple_barrier_label(df, profit_target=0.02, stop_loss=-0.02, window=5
 
 
 # ==========================================
-# SINGLE STOCK LOADER  (original)
+# SINGLE STOCK LOADER
 # ==========================================
 def load_data():
     print(f"---  Loading: {FILE_NAME} ---")
-    print("Test")
 
     if not os.path.exists(FILE_PATH):
         print(f"Error: File not found at:\n   {FILE_PATH}")
@@ -104,7 +77,7 @@ def load_data():
             df["date"] = pd.to_datetime(df["date"])
             df = df.set_index("date")
 
-        print(f"success! Loaded {len(df)} rows.")
+        print(f"Success! Loaded {len(df)} rows.")
         return df
 
     except Exception as e:
@@ -113,7 +86,7 @@ def load_data():
 
 
 # ==========================================
-# PERIOD FILTER  (original)
+# PERIOD FILTER
 # ==========================================
 def get_period(df, start_date, end_date):
     """
@@ -131,31 +104,26 @@ def get_period(df, start_date, end_date):
         raise ValueError("DataFrame index must be a DatetimeIndex")
 
     df_trimmed = df.loc[start_date:end_date].copy()
-
     print(f"Period: {start_date} to {end_date}")
     print(f"Rows: {len(df_trimmed)}")
-
     return df_trimmed
 
 
 # ==========================================
-# BASIC ML FEATURES  (original)
+# BASIC ML FEATURES
 # ==========================================
 def add_ml_features(df):
     """
     Adds technical indicators and the Triple Barrier Label.
     """
-    # --- BASIC FEATURES ---
     df["SMA_20"] = df["close"].rolling(window=20).mean()
     df["daily_return"] = df["close"].pct_change()
     df["volatility_20"] = df["close"].rolling(window=20).std()
 
-    # --- VOLUME INDICATORS ---
     df["OBV"] = (np.sign(df["close"].diff()) * df["volume"]).fillna(0).cumsum()
     df["Volume_SMA_20"] = df["volume"].rolling(window=20).mean()
     df["Volume_Spike"] = np.where(df["volume"] > (df["Volume_SMA_20"] * 1.5), 1, 0)
 
-    # --- MOMENTUM & OSCILLATORS ---
     low_14 = df["low"].rolling(window=14).min()
     high_14 = df["high"].rolling(window=14).max()
     df["Stoch_K"] = 100 * ((df["close"] - low_14) / (high_14 - low_14))
@@ -163,7 +131,6 @@ def add_ml_features(df):
     df["ROC_10"] = df["close"].pct_change(periods=10) * 100
     df["log_return"] = np.log(df["close"] / df["close"].shift(1))
 
-    # --- THE TRIPLE BARRIER TARGET (LABEL) ---
     df["target"] = apply_triple_barrier_label(
         df, profit_target=0.02, stop_loss=-0.02, window=5
     )
@@ -173,59 +140,43 @@ def add_ml_features(df):
 
 
 # ==========================================
-# ADVANCED ML FEATURES  (original)
+# ADVANCED ML FEATURES
 # ==========================================
 def add_ml_features_advanced(df):
     df = df.copy()
 
-    # 1. VOLATILITY (Normalized)
     df["ATR"] = ta.atr(df["high"], df["low"], df["close"], length=14)
     df["ATR_Ratio"] = df["ATR"] / df["close"]
 
-    # 2. BOLLINGER BAND WIDTH
     sma_20 = df["close"].rolling(window=20).mean()
     std_20 = df["close"].rolling(window=20).std()
     df["BB_Width"] = (4 * std_20) / sma_20
-
-    # 3. MOMENTUM
     df["RSI"] = ta.rsi(df["close"], length=14) / 100.0
 
-    # 4. TREND STRENGTH
     adx_df = ta.adx(df["high"], df["low"], df["close"], length=14)
     df["ADX"] = adx_df.iloc[:, 0] / 100.0
-
-    # 5. DISTANCE FROM MEAN
     df["Dist_SMA_20"] = (df["close"] - sma_20) / sma_20
-
-    # 6. VOLUME FORCE
     df["MFI"] = (
         ta.mfi(df["high"], df["low"], df["close"], df["volume"], length=14) / 100.0
     )
-
-    # 7. PRICE ACTION
     df["Range_Ratio"] = (df["high"] - df["low"]) / df["close"]
-
-    # 8. LOG RETURNS
     df["Log_Ret_5"] = np.log(df["close"] / df["close"].shift(5))
 
-    df = df.replace([np.inf, -np.inf], np.nan)
-    df = df.dropna()
-
+    df = df.replace([np.inf, -np.inf], np.nan).dropna()
     print(f"Rows after cleaning: {len(df)}")
     print(f"NaN remaining: {df.isna().sum().sum()}")
-
     return df
 
 
 # ==========================================
-# EXPANDED FEATURE ENGINEERING  (new)
+# EXPANDED FEATURE ENGINEERING
 # Used internally by load_multiple_stocks()
 # ==========================================
 def add_features(df):
     """
     Full feature set for multi-stock LSTM training.
-    All indicators are in scale-invariant (ratio/normalized) form
-    so features are comparable across different-priced stocks.
+    All indicators are scale-invariant (ratio/normalized) so features
+    are comparable across different-priced stocks.
     """
     df = df.copy()
     c, h, l, v = df["close"], df["high"], df["low"], df["volume"]
@@ -269,7 +220,7 @@ def add_features(df):
     df["HL_Range"] = (h - l) / (c + 1e-9)
     df["Gap"] = (df["open"] - c.shift(1)) / (c.shift(1) + 1e-9)
 
-    # MA regime signals (ratio form — scale invariant across stocks)
+    # MA regime signals (ratio form — scale invariant)
     ema9 = c.ewm(span=9, adjust=False).mean()
     ema21 = c.ewm(span=21, adjust=False).mean()
     ema50 = c.ewm(span=50, adjust=False).mean()
@@ -290,53 +241,30 @@ def add_features(df):
 
 
 # ==========================================
-# MULTI-STOCK LOADER  (new)
+# MULTI-STOCK LOADER
 # ==========================================
 def load_multiple_stocks(
-    tickers=None,
-    cleaned_folder=CLEANED_FOLDER,
+    folder=CLEANED_FOLDER,
     min_rows=500,
-    add_ticker_feature=True,
 ):
-    """
-    Loads multiple stocks, engineers features for each, and stacks them
-    into one combined DataFrame ready for LSTM training.
+    all_files = sorted(glob.glob(os.path.join(folder, "*.csv")))
 
-    Parameters
-    ----------
-    tickers           : list of ticker stems e.g. ["aapl.us", "msft.us"]
-                        defaults to DEFAULT_TICKERS
-    cleaned_folder    : folder containing *_cleaned.csv files
-    min_rows          : skip stocks with fewer rows than this
-    add_ticker_feature: adds numeric ticker_id column
+    if not all_files:
+        print(f"No CSV files found in: {folder}")
+        return None, {}
 
-    Returns
-    -------
-    Combined DataFrame sorted by date, with a "ticker" column.
-    Each stock's features are computed independently (no cross-stock leakage).
-    """
-    if tickers is None:
-        tickers = DEFAULT_TICKERS
-
-    # Auto-discover available cleaned files
-    available = glob.glob(os.path.join(cleaned_folder, "*_cleaned.csv"))
-    available_stems = {
-        os.path.basename(f).replace("_cleaned.csv", "") for f in available
-    }
-    tickers = [t for t in tickers if t in available_stems]
-
-    if not tickers:
-        print("No matching cleaned files found. Falling back to single-stock load.")
-        return load_data()
-
-    print(f"Found {len(tickers)} matching tickers: {tickers}\n")
+    print(f"Scanning: {folder}")
+    print(f"Discovered {len(all_files)} CSV files\n")
 
     all_dfs, skipped = [], []
+    ticker_map = {}
 
-    for i, ticker in enumerate(tickers):
-        path = os.path.join(cleaned_folder, f"{ticker}_cleaned.csv")
+    for ticker_id, path in enumerate(all_files):
+        ticker = os.path.basename(path).replace(".csv", "")
+
         try:
             df = pd.read_csv(path)
+
             if "date" in df.columns:
                 df["date"] = pd.to_datetime(df["date"])
                 df = df.set_index("date")
@@ -347,7 +275,7 @@ def load_multiple_stocks(
                 continue
 
             if len(df) < min_rows:
-                skipped.append((ticker, f"only {len(df)} rows"))
+                skipped.append((ticker, f"only {len(df)} rows before features"))
                 continue
 
             df = add_features(df)
@@ -359,30 +287,103 @@ def load_multiple_stocks(
                 continue
 
             df["ticker"] = ticker
-            if add_ticker_feature:
-                df["ticker_id"] = i
+            df["ticker_id"] = ticker_id
+            ticker_map[ticker_id] = ticker
 
             all_dfs.append(df)
-            print(f"  ✓ {ticker:<15} {len(df)} rows")
+            print(f"  ✓ [{ticker_id:>2}]  {ticker:<20}  {len(df):,} rows")
 
         except Exception as e:
             skipped.append((ticker, str(e)))
 
     if skipped:
-        print(f"\nSkipped {len(skipped)} tickers:")
+        print(f"\nSkipped {len(skipped)} files:")
         for t, reason in skipped:
-            print(f"  ✗ {t:<15} {reason}")
+            print(f"  ✗ {t:<20}  {reason}")
 
     if not all_dfs:
         print("\nNo stocks loaded successfully.")
-        return None
+        return None, {}
 
     combined = pd.concat(all_dfs, axis=0).sort_index()
-    print(f"\n{'─'*40}")
+
+    print(f"\n{'─'*45}")
     print(f"Combined dataset : {len(combined):,} rows from {len(all_dfs)} stocks")
+    print(f"Features         : {combined.shape[1]} columns")
     print(
         f"Date range       : {combined.index.min().date()} → {combined.index.max().date()}"
     )
-    print(f"{'─'*40}\n")
+    print(f"{'─'*45}\n")
+    print("Ticker map:")
+    for tid, name in ticker_map.items():
+        print(f"  {tid:>2} → {name}")
 
-    return combined
+    return combined, ticker_map
+
+
+# ==========================================
+# VISUALIZATION
+# ==========================================
+def visualize_classification(model, Y_test, X_test, title="Model"):
+    """
+    Plots a 3-panel classification summary:
+      1. Training loss curve
+      2. Confusion matrix on the test set
+      3. Accuracy vs error bar chart
+
+    Parameters
+    ----------
+    model  : trained model — must have .predict(), .loss_history
+    Y_test : ground truth labels, shape (1, n) or (n,) — values 0 or 1
+    X_test : test features, shape (n, features)
+    title  : string label shown in each plot title e.g. "MLP" or "RNN"
+    """
+    Y_pred = model.predict(X_test)
+    predictions = Y_pred.ravel()
+    actual = Y_test.ravel().astype(int)
+
+    cm = confusion_matrix(actual, predictions)
+    accuracy = np.mean(predictions == actual)
+
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    fig.suptitle(f"{title} — Classification Results", fontsize=16, fontweight="bold")
+
+    # 1. Loss curve
+    axes[0].plot(model.loss_history, color="royalblue", lw=2)
+    axes[0].set_title("Training Loss Over Time", fontsize=14)
+    axes[0].set_xlabel("Epochs")
+    axes[0].set_ylabel("Loss")
+    axes[0].grid(True, alpha=0.3)
+
+    # 2. Confusion matrix
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt="d",
+        cmap="Blues",
+        xticklabels=["Sell", "Buy"],
+        yticklabels=["Sell", "Buy"],
+        ax=axes[1],
+        cbar=False,
+    )
+    axes[1].set_title("Confusion Matrix (Test Set)", fontsize=14)
+    axes[1].set_xlabel("Predicted Label")
+    axes[1].set_ylabel("True Label")
+
+    # 3. Accuracy vs Error
+    axes[2].bar(
+        ["Accuracy", "Error"],
+        [accuracy, 1 - accuracy],
+        color=["#2ecc71", "#e74c3c"],
+    )
+    axes[2].set_title(f"Overall Accuracy: {accuracy:.2%}", fontsize=14)
+    axes[2].set_ylabel("Rate")
+    axes[2].set_ylim(0, 1)
+
+    plt.tight_layout()
+    plt.show()
+
+    print(f"\n{'─'*35}")
+    print(f"  Accuracy : {accuracy:.2%}")
+    print(f"  Error    : {1 - accuracy:.2%}")
+    print(f"{'─'*35}")
