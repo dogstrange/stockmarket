@@ -1,0 +1,3 @@
+# Ignore specific data folders
+data/cleaned/
+data/stock/
