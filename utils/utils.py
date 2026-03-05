@@ -245,25 +245,6 @@ def load_multiple_stocks(
     folder=CLEANED_FOLDER,
     min_rows=500,
 ):
-    """
-    Auto-discovers and loads ALL .csv files in the project_funds folder.
-    Engineers features for each stock and stacks them into one combined
-    DataFrame ready for LSTM training.
-
-    ticker_id is assigned automatically based on alphabetical order of
-    discovered files — no hardcoded list needed.
-
-    Parameters
-    ----------
-    folder   : path to project_funds folder containing *.csv files
-    min_rows : skip stocks with fewer rows than this after feature engineering
-
-    Returns
-    -------
-    combined  : pd.DataFrame  — all stocks stacked, sorted by date
-                columns include all features + "ticker" + "ticker_id"
-    ticker_map: dict          — maps ticker_id (int) → ticker name (str)
-    """
     all_files = sorted(glob.glob(os.path.join(folder, "*.csv")))
 
     if not all_files:

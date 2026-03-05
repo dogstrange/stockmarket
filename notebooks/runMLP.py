@@ -13,6 +13,7 @@ df = utils.load_data()
 df = utils.add_ml_features(df)
 df = utils.add_ml_features_advanced(df)
 
+
 print("\nCleaned data succesfully loaded")
 print(df.head(5))
 print(df["target"].value_counts())
