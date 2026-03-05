@@ -3,6 +3,9 @@ import os
 import glob
 import numpy as np
 import pandas_ta as ta
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
 
 # ── Numpy 2.x compatibility patch ──
 if not hasattr(np, "NaN"):
@@ -11,8 +14,9 @@ if not hasattr(np, "NaN"):
 # ==========================================
 # CONFIGURATION
 # ==========================================
-
 CLEANED_FOLDER = os.path.join("..", "data", "project_funds")
+FILE_NAME = "claude_toy_stock.csv"
+FILE_PATH = os.path.join(CLEANED_FOLDER, FILE_NAME)
 
 
 # ==========================================
@@ -50,6 +54,33 @@ def apply_triple_barrier_label(df, profit_target=0.02, stop_loss=-0.02, window=5
             labels[i] = -1
 
     return labels
+
+
+# ==========================================
+# SINGLE STOCK LOADER
+# ==========================================
+def load_data():
+    print(f"---  Loading: {FILE_NAME} ---")
+
+    if not os.path.exists(FILE_PATH):
+        print(f"Error: File not found at:\n   {FILE_PATH}")
+        print("\n(Did you run the cleaning script first?)")
+        return None
+
+    try:
+        df = pd.read_csv(FILE_PATH)
+        print(df.head())
+
+        if "date" in df.columns:
+            df["date"] = pd.to_datetime(df["date"])
+            df = df.set_index("date")
+
+        print(f"Success! Loaded {len(df)} rows.")
+        return df
+
+    except Exception as e:
+        print(f"Error reading file: {e}")
+        return None
 
 
 # ==========================================
@@ -233,7 +264,6 @@ def load_multiple_stocks(
                 columns include all features + "ticker" + "ticker_id"
     ticker_map: dict          — maps ticker_id (int) → ticker name (str)
     """
-    # ── Discover all CSV files in the folder ──────────────────────────
     all_files = sorted(glob.glob(os.path.join(folder, "*.csv")))
 
     if not all_files:
@@ -244,10 +274,9 @@ def load_multiple_stocks(
     print(f"Discovered {len(all_files)} CSV files\n")
 
     all_dfs, skipped = [], []
-    ticker_map = {}  # ticker_id → ticker name
+    ticker_map = {}
 
     for ticker_id, path in enumerate(all_files):
-        # Derive a clean ticker name from the filename
         ticker = os.path.basename(path).replace(".csv", "")
 
         try:
@@ -257,7 +286,6 @@ def load_multiple_stocks(
                 df["date"] = pd.to_datetime(df["date"])
                 df = df.set_index("date")
 
-            # Validate required OHLCV columns
             required = {"open", "high", "low", "close", "volume"}
             if not required.issubset(df.columns):
                 skipped.append((ticker, "missing OHLCV columns"))
@@ -267,7 +295,6 @@ def load_multiple_stocks(
                 skipped.append((ticker, f"only {len(df)} rows before features"))
                 continue
 
-            # Engineer features
             df = add_features(df)
 
             if len(df) < min_rows // 2:
@@ -276,7 +303,6 @@ def load_multiple_stocks(
                 )
                 continue
 
-            # Tag with identity columns
             df["ticker"] = ticker
             df["ticker_id"] = ticker_id
             ticker_map[ticker_id] = ticker
@@ -310,3 +336,71 @@ def load_multiple_stocks(
         print(f"  {tid:>2} → {name}")
 
     return combined, ticker_map
+
+
+# ==========================================
+# VISUALIZATION
+# ==========================================
+def visualize_classification(model, Y_test, X_test, title="Model"):
+    """
+    Plots a 3-panel classification summary:
+      1. Training loss curve
+      2. Confusion matrix on the test set
+      3. Accuracy vs error bar chart
+
+    Parameters
+    ----------
+    model  : trained model — must have .predict(), .loss_history
+    Y_test : ground truth labels, shape (1, n) or (n,) — values 0 or 1
+    X_test : test features, shape (n, features)
+    title  : string label shown in each plot title e.g. "MLP" or "RNN"
+    """
+    Y_pred = model.predict(X_test)
+    predictions = Y_pred.ravel()
+    actual = Y_test.ravel().astype(int)
+
+    cm = confusion_matrix(actual, predictions)
+    accuracy = np.mean(predictions == actual)
+
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    fig.suptitle(f"{title} — Classification Results", fontsize=16, fontweight="bold")
+
+    # 1. Loss curve
+    axes[0].plot(model.loss_history, color="royalblue", lw=2)
+    axes[0].set_title("Training Loss Over Time", fontsize=14)
+    axes[0].set_xlabel("Epochs")
+    axes[0].set_ylabel("Loss")
+    axes[0].grid(True, alpha=0.3)
+
+    # 2. Confusion matrix
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt="d",
+        cmap="Blues",
+        xticklabels=["Sell", "Buy"],
+        yticklabels=["Sell", "Buy"],
+        ax=axes[1],
+        cbar=False,
+    )
+    axes[1].set_title("Confusion Matrix (Test Set)", fontsize=14)
+    axes[1].set_xlabel("Predicted Label")
+    axes[1].set_ylabel("True Label")
+
+    # 3. Accuracy vs Error
+    axes[2].bar(
+        ["Accuracy", "Error"],
+        [accuracy, 1 - accuracy],
+        color=["#2ecc71", "#e74c3c"],
+    )
+    axes[2].set_title(f"Overall Accuracy: {accuracy:.2%}", fontsize=14)
+    axes[2].set_ylabel("Rate")
+    axes[2].set_ylim(0, 1)
+
+    plt.tight_layout()
+    plt.show()
+
+    print(f"\n{'─'*35}")
+    print(f"  Accuracy : {accuracy:.2%}")
+    print(f"  Error    : {1 - accuracy:.2%}")
+    print(f"{'─'*35}")
