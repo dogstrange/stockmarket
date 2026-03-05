@@ -6,7 +6,7 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from utils import utils
 from models.mymlp import MLPFromScratched
-from models.mrRNN import RNNFromScratch
+from models.myRNN import RNNFromScratch
 
 # %% Data loading
 df = utils.load_data()
@@ -57,11 +57,7 @@ split = int(len(X) * 0.8)
 X_train_raw, X_test_raw = X[:split], X[split:]
 Y_train, Y_test = Y[:split], Y[split:]
 
-# ── Scale AFTER splitting (fit only on train)
 
-# scaler = StandardScaler()
-# X_train = scaler.fit_transform(X_train_raw)  # fit + transform
-# X_test = scaler.transform(X_test_raw)  # transform only
 X_train = X_train_raw
 X_test = X_test_raw
 

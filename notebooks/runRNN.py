@@ -6,7 +6,7 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from utils import utils
 
-from models.mrRNN import RNNFromScratch
+from models.myRNN import RNNFromScratch
 
 # %% Data loading
 df = utils.load_data()
