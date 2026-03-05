@@ -1,3 +1,7 @@
 # Ignore specific data folders
 data/cleaned/
 data/stock/
+
+# Python cache
+__pycache__/
+*.pyc
