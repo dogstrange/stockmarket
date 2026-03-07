@@ -388,3 +388,115 @@ def visualize_classification(model, Y_test, X_test, title="Model"):
     print(f"  Accuracy : {accuracy:.2%}")
     print(f"  Error    : {1 - accuracy:.2%}")
     print(f"{'─'*35}")
+
+
+def apply_pca(X_train, X_test, n_components=None, variance_threshold=0.95, plot=True):
+    """
+    Fits PCA on X_train and transforms both X_train and X_test.
+    Automatically picks the number of components needed to explain
+    variance_threshold of variance (e.g. 0.95 = 95%) unless
+    n_components is set explicitly.
+
+    Parameters
+    ----------
+    X_train            : np.ndarray, shape (n_samples, n_features)
+                         or (n_samples, seq_len, n_features) for RNN sequences
+    X_test             : np.ndarray, same shape as X_train
+    n_components       : int or None — if set, overrides variance_threshold
+    variance_threshold : float — target explained variance (default 0.95)
+    plot               : bool — plot explained variance curve (default True)
+
+    Returns
+    -------
+    X_train_pca : transformed training data
+    X_test_pca  : transformed test data
+    pca         : fitted PCA object (keep this to transform future data)
+    """
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.decomposition import PCA
+
+    # ── Handle RNN sequences (3D) by flattening to 2D ────────────────
+    is_3d = X_train.ndim == 3
+    if is_3d:
+        n_train, seq_len, n_features = X_train.shape
+        n_test = X_test.shape[0]
+        X_train_2d = X_train.reshape(n_train, seq_len * n_features)
+        X_test_2d = X_test.reshape(n_test, seq_len * n_features)
+    else:
+        X_train_2d = X_train
+        X_test_2d = X_test
+
+    # ── Standardize before PCA ────────────────────────────────────────
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train_2d)
+    X_test_scaled = scaler.transform(X_test_2d)
+
+    # ── Determine n_components ────────────────────────────────────────
+    if n_components is None:
+        pca_full = PCA().fit(X_train_scaled)
+        cumvar = np.cumsum(pca_full.explained_variance_ratio_)
+        n_components = int(np.searchsorted(cumvar, variance_threshold) + 1)
+        print(
+            f"PCA: {n_components} components explain {cumvar[n_components-1]:.2%} variance"
+        )
+    else:
+        pca_full = PCA().fit(X_train_scaled)
+        cumvar = np.cumsum(pca_full.explained_variance_ratio_)
+        print(
+            f"PCA: using {n_components} components → {cumvar[n_components-1]:.2%} variance explained"
+        )
+
+    # ── Fit final PCA ─────────────────────────────────────────────────
+    pca = PCA(n_components=n_components)
+    X_train_pca = pca.fit_transform(X_train_scaled)
+    X_test_pca = pca.transform(X_test_scaled)
+
+    # ── Plot explained variance ───────────────────────────────────────
+    if plot:
+        fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+        fig.suptitle("PCA — Explained Variance", fontsize=14, fontweight="bold")
+
+        # Individual variance per component
+        axes[0].bar(
+            range(1, len(pca_full.explained_variance_ratio_) + 1),
+            pca_full.explained_variance_ratio_,
+            color="steelblue",
+            alpha=0.7,
+        )
+        axes[0].axvline(
+            n_components, color="red", linestyle="--", label=f"Selected: {n_components}"
+        )
+        axes[0].set_title("Variance per Component")
+        axes[0].set_xlabel("Principal Component")
+        axes[0].set_ylabel("Explained Variance Ratio")
+        axes[0].legend()
+
+        # Cumulative variance
+        axes[1].plot(
+            range(1, len(cumvar) + 1),
+            cumvar,
+            marker="o",
+            color="steelblue",
+            markersize=3,
+        )
+        axes[1].axhline(
+            variance_threshold,
+            color="orange",
+            linestyle="--",
+            label=f"Threshold: {variance_threshold:.0%}",
+        )
+        axes[1].axvline(
+            n_components, color="red", linestyle="--", label=f"Selected: {n_components}"
+        )
+        axes[1].set_title("Cumulative Explained Variance")
+        axes[1].set_xlabel("Number of Components")
+        axes[1].set_ylabel("Cumulative Variance")
+        axes[1].legend()
+
+        plt.tight_layout()
+        plt.show()
+
+    print(f"X_train: {X_train_2d.shape} → {X_train_pca.shape}")
+    print(f"X_test : {X_test_2d.shape}  → {X_test_pca.shape}")
+
+    return X_train_pca, X_test_pca, pca
