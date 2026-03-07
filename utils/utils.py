@@ -325,20 +325,28 @@ def load_multiple_stocks(
 # ==========================================
 # VISUALIZATION
 # ==========================================
-def visualize_classification(model, Y_test, X_test, title="Model"):
+def visualize_classification(model, Y_test, X_test, title="Model", feature_names=None):
     """
-    Plots a 3-panel classification summary:
-      1. Training loss curve
-      2. Confusion matrix on the test set
-      3. Accuracy vs error bar chart
+    Plots a classification summary. Adapts layout based on model type:
+
+    - If model has loss_history  → 3 panels: Loss curve | Confusion matrix | Accuracy bar
+    - If model has feature_importances_ (tree) → 3 panels: Feature importance | Confusion matrix | Accuracy bar
 
     Parameters
     ----------
-    model  : trained model — must have .predict(), .loss_history
-    Y_test : ground truth labels, shape (1, n) or (n,) — values 0 or 1
-    X_test : test features, shape (n, features)
-    title  : string label shown in each plot title e.g. "MLP" or "RNN"
+    model         : trained model — must have .predict()
+                    optionally .loss_history or .feature_importances_
+    Y_test        : ground truth labels, shape (1, n) or (n,) — values 0 or 1
+    X_test        : test features, shape (n, features)
+    title         : string label shown in plot titles e.g. "MLP", "RNN", "Decision Tree"
+    feature_names : list of feature name strings (used for tree importance plot)
+                    If None, defaults to "Feature 0", "Feature 1", ...
     """
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from sklearn.metrics import confusion_matrix
+
     Y_pred = model.predict(X_test)
     predictions = Y_pred.ravel()
     actual = Y_test.ravel().astype(int)
@@ -346,17 +354,58 @@ def visualize_classification(model, Y_test, X_test, title="Model"):
     cm = confusion_matrix(actual, predictions)
     accuracy = np.mean(predictions == actual)
 
+    has_loss = hasattr(model, "loss_history") and len(model.loss_history) > 0
+    has_importances = (
+        hasattr(model, "feature_importances_")
+        and model.feature_importances_ is not None
+    )
+
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
     fig.suptitle(f"{title} — Classification Results", fontsize=16, fontweight="bold")
 
-    # 1. Loss curve
-    axes[0].plot(model.loss_history, color="royalblue", lw=2)
-    axes[0].set_title("Training Loss Over Time", fontsize=14)
-    axes[0].set_xlabel("Epochs")
-    axes[0].set_ylabel("Loss")
-    axes[0].grid(True, alpha=0.3)
+    # ── Panel 1: Loss curve OR Feature importances ────────────────────────────
+    if has_loss:
+        axes[0].plot(model.loss_history, color="royalblue", lw=2)
+        axes[0].set_title("Training Loss Over Time", fontsize=14)
+        axes[0].set_xlabel("Epochs")
+        axes[0].set_ylabel("Loss")
+        axes[0].grid(True, alpha=0.3)
 
-    # 2. Confusion matrix
+    elif has_importances:
+        importances = model.feature_importances_
+        n_features = len(importances)
+
+        if feature_names is None:
+            feature_names = [f"Feature {i}" for i in range(n_features)]
+
+        # Sort top-15 for readability
+        top_n = min(15, n_features)
+        idx = np.argsort(importances)[::-1][:top_n]
+        top_imp = importances[idx]
+        top_lbl = [feature_names[i] for i in idx]
+
+        axes[0].barh(range(top_n), top_imp[::-1], color="steelblue", alpha=0.85)
+        axes[0].set_yticks(range(top_n))
+        axes[0].set_yticklabels(top_lbl[::-1], fontsize=9)
+        axes[0].set_title(f"Top {top_n} Feature Importances", fontsize=14)
+        axes[0].set_xlabel("Importance (weighted Gini gain)")
+        axes[0].grid(True, axis="x", alpha=0.3)
+
+    else:
+        axes[0].text(
+            0.5,
+            0.5,
+            "No loss history\nor feature importances\navailable",
+            ha="center",
+            va="center",
+            fontsize=12,
+            color="gray",
+            transform=axes[0].transAxes,
+        )
+        axes[0].set_title("N/A", fontsize=14)
+        axes[0].axis("off")
+
+    # ── Panel 2: Confusion matrix ─────────────────────────────────────────────
     sns.heatmap(
         cm,
         annot=True,
@@ -371,7 +420,7 @@ def visualize_classification(model, Y_test, X_test, title="Model"):
     axes[1].set_xlabel("Predicted Label")
     axes[1].set_ylabel("True Label")
 
-    # 3. Accuracy vs Error
+    # ── Panel 3: Accuracy vs Error bar ────────────────────────────────────────
     axes[2].bar(
         ["Accuracy", "Error"],
         [accuracy, 1 - accuracy],

@@ -8,9 +8,7 @@ from utils import utils
 from models import mySVM
 
 # %% Data loading
-df = utils.load_data()
-df = utils.add_ml_features(df)
-df = utils.add_ml_features_advanced(df)
+df, ticker_map = utils.load_multiple_stocks()
 
 print("\nCleaned data successfully loaded")
 print(df.head(5))
@@ -20,32 +18,33 @@ print(df["target"].value_counts())
 # %% Initial visualization
 import matplotlib.pyplot as plt
 
-daily_return = df["daily_return"].values
-volatility_20 = df["volatility_20"].values
+# Use available features for visualization
+log_ret = df["Log_Ret"].values
+atr_ratio = df["ATR_Ratio"].values
 labels = df["target"].values
 
 plt.figure(figsize=(10, 6))
 mask_positive = labels == 1
 plt.scatter(
-    volatility_20[mask_positive],
-    daily_return[mask_positive],
+    atr_ratio[mask_positive],
+    log_ret[mask_positive],
     c="green",
-    label="Label 1",
+    label="Buy (1)",
     alpha=0.6,
     s=100,
 )
 mask_negative = labels == -1
 plt.scatter(
-    volatility_20[mask_negative],
-    daily_return[mask_negative],
-    c="blue",
-    label="Label -1",
+    atr_ratio[mask_negative],
+    log_ret[mask_negative],
+    c="red",
+    label="Sell (-1)",
     alpha=0.6,
     s=100,
 )
-plt.xlabel("Volatility_20", fontsize=12)
-plt.ylabel("Daily Return", fontsize=12)
-plt.title("Cluster Visualization: Volatility vs Daily Return", fontsize=14)
+plt.xlabel("ATR_Ratio", fontsize=12)
+plt.ylabel("Log Return", fontsize=12)
+plt.title("Initial Visualization: ATR Ratio vs Log Return", fontsize=14)
 plt.legend()
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
@@ -53,37 +52,51 @@ plt.show()
 
 
 # %% Prepare features & labels
-# ── Use ALL available features so PCA actually has something to reduce ────────
+# ── Use features consistent with multi-stock data ────────
 feature_cols = [
-    # Basic
-    "SMA_20",
-    "daily_return",
-    "volatility_20",
-    "OBV",
-    "Volume_SMA_20",
-    "Volume_Spike",
-    "Stoch_K",
-    "Stoch_D",
-    "ROC_10",
-    "log_return",
-    # Advanced
     "ATR_Ratio",
-    "BB_Width",
-    "RSI",
+    "RSI_14",
+    "RSI_7",
     "ADX",
-    "Dist_SMA_20",
+    "Dist_SMA20",
     "MFI",
-    "Range_Ratio",
+    "HL_Range",
     "Log_Ret_5",
+    "Log_Ret_3",
+    "Log_Ret",
+    "BB_Width",
+    "BB_Pos",
+    "EMA9_21",
+    "EMA21_50",
+    "STOCH_K",
+    "STOCH_D",
+    "ROC_5",
+    "Vol_ratio",
 ]
 
 # Only keep rows where target != 0 (binary classification)
 df_binary = df[df["target"] != 0].copy()
 
-X_raw = df_binary[feature_cols].to_numpy()
+# ── Per-stock rolling Z-score normalization (like other run files) ──────────────────────────────────
+window = 100
+for col in feature_cols:
+    df_binary[f"{col}_z"] = (
+        df_binary.groupby("ticker")[col]
+        .transform(
+            lambda s: (
+                (s - s.rolling(window).mean()) / (s.rolling(window).std() + 1e-8)
+            )
+        )
+        .fillna(0)
+    )
+
+feature_cols_z = [f"{col}_z" for col in feature_cols]
+df_binary = df_binary.dropna(subset=feature_cols_z)
+
+X_raw = df_binary[feature_cols_z].to_numpy()
 Y = df_binary["target"].to_numpy()  # values: -1 or +1
 
-print(f"\nUsing {len(feature_cols)} features: {feature_cols}")
+print(f"\nUsing {len(feature_cols_z)} Z-normalized features")
 print(f"Dataset size: {X_raw.shape}")
 
 # ── Chronological split ───────────────────────────────────────────────────────
@@ -108,7 +121,7 @@ print(f"After PCA         : {X_train_pca.shape[1]}")
 
 
 # %% SVM Linear — trained on PCA features
-svm_linear = mySVM.SVMSoftmargin(alpha=0.001, iteration=10000, lambda_=0.01)
+svm_linear = mySVM.SVMSoftmargin(alpha=0.001, iteration=1000, lambda_=0.01)
 w_l, b_l = svm_linear.fit(X_train_pca, Y_train)
 predictions_train = svm_linear.predict(X_train_pca)
 predictions_test = svm_linear.predict(X_test_pca)

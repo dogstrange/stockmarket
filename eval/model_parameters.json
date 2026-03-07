@@ -1,0 +1,137 @@
+{
+  "classification_models": {
+    "SLP": {
+      "description": "Single Layer Perceptron",
+      "parameters": {
+        "learning_rate": 0.01,
+        "epochs": 10000,
+        "class_weight": {"1": 1.0, "0": 1.0}
+      },
+      "input_shape": "Z-normalized features (18 features)",
+      "output": "Binary classification (0/1)",
+      "notes": "Simple neural network with one layer"
+    },
+    "MLP": {
+      "description": "Multi Layer Perceptron",
+      "parameters": {
+        "learning_rate": 0.01,
+        "epochs": 20000,
+        "hidden_layers": [32, 32, 32],
+        "class_weight": {"1": 1.0, "0": 1.0}
+      },
+      "input_shape": "Z-normalized features (18 features)",
+      "output": "Binary classification (0/1)",
+      "notes": "Deep neural network with 3 hidden layers"
+    },
+    "SVM_Soft": {
+      "description": "SVM Soft Margin",
+      "parameters": {
+        "alpha": 0.001,
+        "iterations": 10000,
+        "lambda": 0.01
+      },
+      "input_shape": "Raw features (-1/1 labels)",
+      "output": "Binary classification (-1/1)",
+      "notes": "Soft margin SVM with regularization"
+    },
+    "SVM_Dual": {
+      "description": "SVM Dual Form",
+      "parameters": {
+        "kernel": "rbf",
+        "degree": 2,
+        "sigma": 1.0,
+        "epochs": 1000,
+        "learning_rate": 0.001
+      },
+      "input_shape": "PCA features (-1/1 labels)",
+      "output": "Binary classification (-1/1)",
+      "notes": "Dual formulation with RBF kernel"
+    },
+    "Logistic": {
+      "description": "Logistic Regression",
+      "parameters": {
+        "learning_rate": 0.01,
+        "epochs": 10000
+      },
+      "input_shape": "Z-normalized features (binary 0/1)",
+      "output": "Binary classification (0/1)",
+      "notes": "From scratch logistic regression"
+    },
+    "Kmeans": {
+      "description": "K-means Clustering",
+      "parameters": {
+        "k": 2,
+        "max_iterations": 100,
+        "tolerance": 0.0001
+      },
+      "input_shape": "Z-normalized features",
+      "output": "Cluster assignments (0/1)",
+      "notes": "Unsupervised clustering used for classification"
+    },
+    "RNN": {
+      "description": "Recurrent Neural Network",
+      "parameters": {
+        "learning_rate": 0.01,
+        "epochs": 3000,
+        "hidden_size": 32,
+        "sequence_length": 20
+      },
+      "input_shape": "Sequences (20 timesteps × 18 features)",
+      "output": "Binary classification (0/1)",
+      "notes": "Temporal model for sequential data"
+    }
+  },
+  "regression_models": {
+    "Multiple_Linear": {
+      "description": "Multiple Linear Regression",
+      "parameters": {
+        "learning_rate": 0.01,
+        "max_epochs": 8000,
+        "patience": 200
+      },
+      "input_shape": "Raw features (18 features)",
+      "output": "Continuous return prediction",
+      "notes": "Linear model with normalization and early stopping"
+    },
+    "Polynomial": {
+      "description": "Polynomial Regression",
+      "parameters": {
+        "degree": 2,
+        "learning_rate": 0.01,
+        "max_epochs": 6000,
+        "patience": 300,
+        "l2_lambda": 0.001
+      },
+      "input_shape": "Raw features (18 features)",
+      "output": "Continuous return prediction",
+      "notes": "Degree-2 polynomial features with L2 regularization"
+    },
+    "Simple_Linear": {
+      "description": "Simple Linear Regression",
+      "parameters": {
+        "learning_rate": 0.01,
+        "epochs": 5000
+      },
+      "input_shape": "Single feature (Log_Ret)",
+      "output": "Continuous return prediction",
+      "notes": "Univariate linear regression"
+    }
+  },
+  "data_preprocessing": {
+    "source": "utils.load_multiple_stocks()",
+    "features": [
+      "ATR_Ratio", "RSI_14", "RSI_7", "ADX", "Dist_SMA20", "MFI",
+      "HL_Range", "Log_Ret_5", "Log_Ret_3", "Log_Ret", "BB_Width",
+      "BB_Pos", "EMA9_21", "EMA21_50", "STOCH_K", "STOCH_D",
+      "ROC_5", "Vol_ratio"
+    ],
+    "normalization": "Per-stock rolling Z-score (window=100)",
+    "target_classification": "Triple barrier labels (-1/0/1) → binary (-1/1)",
+    "target_regression": "Next day Log_Ret",
+    "split": "80/20 chronological train/test (classification), 60/20/20 train/val/test (regression)"
+  },
+  "evaluation_metrics": {
+    "classification": ["accuracy", "precision", "recall", "f1", "confusion_matrix"],
+    "regression": ["mae", "rmse", "r2", "mape", "direction_accuracy"]
+  }
+}

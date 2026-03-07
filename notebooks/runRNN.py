@@ -10,8 +10,9 @@ from models.myRNN import RNNFromScratch
 
 # %% Data loading
 df = utils.load_data()
-df = utils.add_ml_features(df)
-df = utils.add_ml_features_advanced(df)
+df = utils.add_features(df)
+df["target"] = utils.apply_triple_barrier_label(df)
+
 
 print("\nCleaned data succesfully loaded")
 print(df.head(5))
@@ -22,14 +23,23 @@ print(df["target"].value_counts())
 df_binary = df[df["target"] != 0].copy()
 feature_cols = [
     "ATR_Ratio",
-    "RSI",
+    "RSI_14",
+    "RSI_7",
     "ADX",
-    "Dist_SMA_20",
+    "Dist_SMA20",
     "MFI",
-    "Range_Ratio",
+    "HL_Range",
     "Log_Ret_5",
-    "volatility_20",
-    "SMA_20",
+    "Log_Ret_3",
+    "Log_Ret",
+    "BB_Width",
+    "BB_Pos",
+    "EMA9_21",
+    "EMA21_50",
+    "STOCH_K",
+    "STOCH_D",
+    "ROC_5",
+    "Vol_ratio",
 ]
 
 # ── Rolling Z-score normalization (same as your original)
