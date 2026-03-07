@@ -15,7 +15,8 @@ if not hasattr(np, "NaN"):
 # CONFIGURATION
 # ==========================================
 
-CLEANED_FOLDER = os.path.join("..", "data", "project_funds")
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+CLEANED_FOLDER = os.path.join(_THIS_DIR, "..", "data", "project_funds")
 
 FILE_NAME = "claude_toy_stock.csv"
 FILE_PATH = os.path.join(CLEANED_FOLDER, FILE_NAME)
